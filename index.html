@@ -119,6 +119,27 @@ async function ensureBase(){
   }
 }
 
+function setConnected(a){
+  addr = a;
+  $("wallet").textContent = short(a);
+  const prev = store("reg:" + a.toLowerCase());
+  if(prev) showDone(prev);
+  else { $("done").style.display = "none"; $("reg").disabled = false; $("reg").textContent = "Register wallet"; }
+}
+function setDisconnected(){
+  addr = null;
+  $("wallet").textContent = "Connect wallet";
+  $("done").style.display = "none";
+  $("reg").disabled = false;
+  $("reg").textContent = "Connect wallet to register";
+}
+let bound = false;
+function bind(p){
+  if(bound || !p.on) return;
+  bound = true;
+  p.on("accountsChanged", accs => { if(accs && accs.length) setConnected(accs[0]); else setDisconnected(); });
+}
+
 async function connect(){
   say("Connecting...");
   const p = await getProvider();
@@ -128,19 +149,22 @@ async function connect(){
     return;
   }
   try{
+    bind(p);
     const accs = await p.request({method:"eth_requestAccounts"});
-    addr = accs[0];
-    await ensureBase();
-    $("wallet").textContent = short(addr);
+    setConnected(accs[0]);
     say("");
-    if(p.on){
-      p.on("accountsChanged", () => location.reload());
-      p.on("chainChanged", () => location.reload());
-    }
-    const prev = store("reg:" + addr.toLowerCase());
-    if(prev) showDone(prev);
-    else { $("reg").disabled = false; $("reg").textContent = "Register wallet"; }
+    await ensureBase();
   }catch(e){ say(errText(e), true); }
+}
+
+async function restore(){
+  const p = await getProvider();
+  if(!p) return;
+  bind(p);
+  try{
+    const accs = await p.request({method:"eth_accounts"});
+    if(accs && accs.length) setConnected(accs[0]);
+  }catch(_){}
 }
 
 async function waitReceipt(hash){
@@ -168,6 +192,7 @@ async function register(){
 
 $("wallet").onclick = connect;
 $("reg").onclick = register;
+restore();
 </script>
 </body>
 </html>
