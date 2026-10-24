@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Base Founders Badge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<style>
+:root{--cream:#fbf6e9;--sand:#efe6cc;--ink:#1b1a14;--lime:#b6f000;--cyan:#00d9ff}
+*{box-sizing:border-box;margin:0}
+body{background:var(--cream);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,sans-serif;line-height:1.45;padding:max(18px,env(safe-area-inset-top)) 18px max(28px,env(safe-area-inset-bottom));max-width:520px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:22px}
+header b{font-size:18px;font-weight:800}
+button{font:inherit;cursor:pointer;border:2.5px solid var(--ink);background:var(--lime);color:var(--ink);font-weight:800;border-radius:14px;padding:12px 18px;box-shadow:4px 4px 0 var(--ink);transition:transform .08s,box-shadow .08s}
+button:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink)}
+button:disabled{background:var(--sand);color:#7d7766;cursor:not-allowed;box-shadow:none}
+button:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+#wallet{padding:9px 14px;font-size:14px;background:var(--cream)}
+.box{margin:6px auto 22px;width:min(78vw,300px);aspect-ratio:1;border-radius:34px;background:var(--cream);border:8px solid var(--lime);box-shadow:0 0 28px 2px rgba(182,240,0,.65),inset 0 0 22px rgba(182,240,0,.35);display:grid;place-items:center;text-align:center;animation:glow 4s ease-in-out infinite}
+@keyframes glow{50%{border-color:var(--cyan);box-shadow:0 0 30px 3px rgba(0,217,255,.6),inset 0 0 22px rgba(0,217,255,.3)}}
+@media (prefers-reduced-motion:reduce){.box{animation:none}}
+h1{font-size:34px;line-height:1.05;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
+p.sub{font-size:16px;margin-bottom:18px}
+.row{display:flex;justify-content:space-between;font-size:15px;border:2.5px solid var(--ink);border-radius:14px;padding:11px 14px;margin-bottom:16px;background:#fff9}
+#reg{width:100%;font-size:19px;padding:16px}
+#status{min-height:24px;margin-top:12px;font-size:14px;word-break:break-word}
+#status.err{color:#b3261e}
+#done{display:none;margin-top:16px;border:2.5px solid var(--lime);border-radius:18px;padding:14px;background:#fff9;box-shadow:0 0 16px -2px var(--lime)}
+#done b{font-size:18px}
+#done a{color:var(--ink)}
+h2{font-size:22px;font-weight:800;margin:30px 0 4px}
+.tiers{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.tier{border:2.5px solid var(--c);border-radius:18px;padding:12px;background:#fff9;box-shadow:0 0 14px -2px var(--c)}
+.tier b{display:block;font-size:17px}
+.tier strong{display:block;font-size:22px}
+.note{font-size:14px;opacity:.8}
+footer{margin-top:30px;font-size:12px;opacity:.65}
+</style>
+</head>
+<body>
+<header><b>Base Founders Badge</b><button id="wallet">Connect wallet</button></header>
+
+<div class="box" role="img" aria-label="Lootbox"><svg viewBox="0 0 100 100" width="58%" fill="none" stroke="#1b1a14" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"><path d="M50 10 88 30v40L50 90 12 70V30z" fill="#fbf6e9"/><path d="M12 30l38 20 38-20M50 50v40" /><path d="M31 20l38 20v14" stroke="#b6f000" stroke-width="5"/><circle cx="50" cy="50" r="5" fill="#00d9ff" stroke="#1b1a14"/></svg></div>
+
+<h1>Register your wallet</h1>
+<p class="sub">Pay the registration fee on Base to reserve your badge. First 6666 wallets only. Badges are distributed in Q4.</p>
+
+<button id="reg">Connect wallet to register</button>
+<p id="status"></p>
+
+<div id="done">
+  <b>Wallet registered</b>
+  <p class="note" id="who"></p>
+  <p class="note"><a id="txl" target="_blank" rel="noopener">View transaction</a></p>
+</div>
+
+<h2>Utilities</h2>
+<p class="note">Lootbox opens at Q4. Holders get a rarity from the lootbox when badges go live.</p>
+<div class="tiers">
+  <div class="tier" style="--c:#8f9a8a"><b>Common</b><strong>3666</strong></div>
+  <div class="tier" style="--c:#00d9ff"><b>Rare</b><strong>2000</strong></div>
+  <div class="tier" style="--c:#c026ff"><b>Epic</b><strong>800</strong></div>
+  <div class="tier" style="--c:#b6f000"><b>Legendary</b><strong>200</strong></div>
+</div>
+
+<footer>Network: Base. Send the exact fee once per wallet. Extra payments are not counted.</footer>
+
+<script>
+const R = "0x580Aab97021D7D379c8d26444eAae332C3014ba7".toLowerCase();
+const FEE = "0.000333";
+const TAG = ethers.hexlify(ethers.toUtf8Bytes("base-badge-reg"));
+const BASE = {chainId:"0x2105",chainName:"Base",nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},rpcUrls:["https://mainnet.base.org"],blockExplorerUrls:["https://basescan.org"]};
+const $ = id => document.getElementById(id);
+let addr = null;
+
+const short = a => a.slice(0,6)+"..."+a.slice(-4);
+const errText = e => e.shortMessage || e.reason || e.message || "Something went wrong";
+function say(m, err){ $("status").textContent = m || ""; $("status").className = err ? "err" : ""; }
+function store(k, v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(_){ return null; } }
+
+function showDone(hash){
+  $("who").textContent = short(addr) + " is on the list.";
+  $("txl").href = "https://basescan.org/tx/" + hash;
+  $("done").style.display = "block";
+  $("reg").disabled = true;
+  $("reg").textContent = "Registered";
+}
+
+async function ensureBase(){
+  if((await window.ethereum.request({method:"eth_chainId"})) === BASE.chainId) return;
+  try{ await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:BASE.chainId}]}); }
+  catch(e){ await window.ethereum.request({method:"wallet_addEthereumChain",params:[BASE]}); }
+}
+
+async function connect(){
+  if(!window.ethereum){
+    say("No wallet found. Open this page in your wallet app browser.", true);
+    $("status").innerHTML += ' <a href="https://metamask.app.link/dapp/'+location.host+location.pathname+'">Open in MetaMask</a>';
+    return;
+  }
+  try{
+    const p = new ethers.BrowserProvider(window.ethereum);
+    await p.send("eth_requestAccounts", []);
+    await ensureBase();
+    addr = await (await new ethers.BrowserProvider(window.ethereum).getSigner()).getAddress();
+    $("wallet").textContent = short(addr);
+    say("");
+    const prev = store("reg:" + addr.toLowerCase());
+    if(prev) showDone(prev);
+    else { $("reg").disabled = false; $("reg").textContent = "Register wallet"; }
+  }catch(e){ say(errText(e), true); }
+}
+
+async function register(){
+  if(!addr) return connect();
+  try{
+    await ensureBase();
+    const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
+    $("reg").disabled = true;
+    say("Confirm in your wallet...");
+    const tx = await signer.sendTransaction({to:R, value:ethers.parseEther(FEE), data:TAG});
+    say("Registering on Base...");
+    await tx.wait();
+    store("reg:" + addr.toLowerCase(), tx.hash);
+    say("");
+    showDone(tx.hash);
+  }catch(e){ say(errText(e), true); $("reg").disabled = false; }
+}
+
+$("wallet").onclick = connect;
+$("reg").onclick = register;
+if(window.ethereum){
+  window.ethereum.on?.("accountsChanged", ()=>location.reload());
+  window.ethereum.on?.("chainChanged", ()=>location.reload());
+}
+</script>
+</body>
+</html>
