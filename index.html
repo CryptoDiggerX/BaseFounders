@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
 <style>
 :root{--cream:#fbf6e9;--sand:#efe6cc;--ink:#1b1a14;--lime:#b6f000;--cyan:#00d9ff}
 *{box-sizing:border-box;margin:0}
@@ -70,16 +69,36 @@ footer{margin-top:30px;font-size:12px;opacity:.65}
 
 <script>
 const R = "0x580Aab97021D7D379c8d26444eAae332C3014ba7".toLowerCase();
-const FEE = "0.000333";
-const TAG = ethers.hexlify(ethers.toUtf8Bytes("base-badge-reg"));
+const VALUE = "0x" + BigInt("333000000000000").toString(16);
+const TAG = "0x" + Array.from(new TextEncoder().encode("base-badge-reg")).map(b => b.toString(16).padStart(2,"0")).join("");
 const BASE = {chainId:"0x2105",chainName:"Base",nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},rpcUrls:["https://mainnet.base.org"],blockExplorerUrls:["https://basescan.org"]};
 const $ = id => document.getElementById(id);
-let addr = null;
+let eth = null, addr = null;
 
-const short = a => a.slice(0,6)+"..."+a.slice(-4);
-const errText = e => e.shortMessage || e.reason || e.message || "Something went wrong";
+const short = a => a.slice(0,6) + "..." + a.slice(-4);
+function errText(e){
+  if(e && (e.code === 4001 || e.code === "ACTION_REJECTED")) return "Cancelled in wallet. Tap again to retry.";
+  return (e && (e.shortMessage || e.message)) || "Something went wrong";
+}
 function say(m, err){ $("status").textContent = m || ""; $("status").className = err ? "err" : ""; }
-function store(k, v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(_){ return null; } }
+function store(k, v){ try{ if(v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(_){ return null; } }
+window.addEventListener("error", e => say("Error: " + e.message, true));
+window.addEventListener("unhandledrejection", e => say(errText(e.reason), true));
+
+function findProvider(){
+  const w = window.ethereum;
+  if(!w) return null;
+  if(Array.isArray(w.providers) && w.providers.length) return w.providers.find(p => p.isMetaMask) || w.providers[0];
+  return w;
+}
+async function getProvider(){
+  for(let i = 0; i < 20; i++){
+    eth = findProvider();
+    if(eth) return eth;
+    await new Promise(r => setTimeout(r, 150));
+  }
+  return null;
+}
 
 function showDone(hash){
   $("who").textContent = short(addr) + " is on the list.";
@@ -90,52 +109,65 @@ function showDone(hash){
 }
 
 async function ensureBase(){
-  if((await window.ethereum.request({method:"eth_chainId"})) === BASE.chainId) return;
-  try{ await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:BASE.chainId}]}); }
-  catch(e){ await window.ethereum.request({method:"wallet_addEthereumChain",params:[BASE]}); }
+  if((await eth.request({method:"eth_chainId"})) === BASE.chainId) return;
+  try{
+    await eth.request({method:"wallet_switchEthereumChain", params:[{chainId:BASE.chainId}]});
+  }catch(e){
+    if(e && e.code === 4001) throw e;
+    await eth.request({method:"wallet_addEthereumChain", params:[BASE]});
+    await eth.request({method:"wallet_switchEthereumChain", params:[{chainId:BASE.chainId}]});
+  }
 }
 
 async function connect(){
-  if(!window.ethereum){
-    say("No wallet found. Open this page in your wallet app browser.", true);
-    $("status").innerHTML += ' <a href="https://metamask.app.link/dapp/'+location.host+location.pathname+'">Open in MetaMask</a>';
+  say("Connecting...");
+  const p = await getProvider();
+  if(!p){
+    say("No wallet found. Open this page inside your wallet app browser.", true);
+    $("status").innerHTML += ' <a href="https://metamask.app.link/dapp/' + location.host + location.pathname + '">Open in MetaMask</a>';
     return;
   }
   try{
-    const p = new ethers.BrowserProvider(window.ethereum);
-    await p.send("eth_requestAccounts", []);
+    const accs = await p.request({method:"eth_requestAccounts"});
+    addr = accs[0];
     await ensureBase();
-    addr = await (await new ethers.BrowserProvider(window.ethereum).getSigner()).getAddress();
     $("wallet").textContent = short(addr);
     say("");
+    if(p.on){
+      p.on("accountsChanged", () => location.reload());
+      p.on("chainChanged", () => location.reload());
+    }
     const prev = store("reg:" + addr.toLowerCase());
     if(prev) showDone(prev);
     else { $("reg").disabled = false; $("reg").textContent = "Register wallet"; }
   }catch(e){ say(errText(e), true); }
 }
 
+async function waitReceipt(hash){
+  for(let i = 0; i < 45; i++){
+    const r = await eth.request({method:"eth_getTransactionReceipt", params:[hash]});
+    if(r){ if(r.status === "0x0") throw new Error("Transaction failed on Base."); return; }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
 async function register(){
   if(!addr) return connect();
   try{
     await ensureBase();
-    const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
     $("reg").disabled = true;
     say("Confirm in your wallet...");
-    const tx = await signer.sendTransaction({to:R, value:ethers.parseEther(FEE), data:TAG});
+    const hash = await eth.request({method:"eth_sendTransaction", params:[{from:addr, to:R, value:VALUE, data:TAG}]});
     say("Registering on Base...");
-    await tx.wait();
-    store("reg:" + addr.toLowerCase(), tx.hash);
+    await waitReceipt(hash);
+    store("reg:" + addr.toLowerCase(), hash);
     say("");
-    showDone(tx.hash);
+    showDone(hash);
   }catch(e){ say(errText(e), true); $("reg").disabled = false; }
 }
 
 $("wallet").onclick = connect;
 $("reg").onclick = register;
-if(window.ethereum){
-  window.ethereum.on?.("accountsChanged", ()=>location.reload());
-  window.ethereum.on?.("chainChanged", ()=>location.reload());
-}
 </script>
 </body>
 </html>
