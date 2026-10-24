@@ -70,7 +70,6 @@ footer{margin-top:30px;font-size:12px;opacity:.65}
 <script>
 const R = "0x580Aab97021D7D379c8d26444eAae332C3014ba7".toLowerCase();
 const VALUE = "0x" + BigInt("333000000000000").toString(16);
-const TAG = "0x" + Array.from(new TextEncoder().encode("base-badge-reg")).map(b => b.toString(16).padStart(2,"0")).join("");
 const BASE = {chainId:"0x2105",chainName:"Base",nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},rpcUrls:["https://mainnet.base.org"],blockExplorerUrls:["https://basescan.org"]};
 const $ = id => document.getElementById(id);
 let eth = null, addr = null;
@@ -181,7 +180,10 @@ async function register(){
     await ensureBase();
     $("reg").disabled = true;
     say("Confirm in your wallet...");
-    const hash = await eth.request({method:"eth_sendTransaction", params:[{from:addr, to:R, value:VALUE, data:TAG}]});
+    const tx = {from:addr, to:R, value:VALUE};
+    try{ await eth.request({method:"eth_estimateGas", params:[tx]}); }
+    catch(e){ if(e && e.code === 4001) throw e; throw new Error("Registration is unavailable right now. No fee was sent. Please try again later."); }
+    const hash = await eth.request({method:"eth_sendTransaction", params:[tx]});
     say("Registering on Base...");
     await waitReceipt(hash);
     store("reg:" + addr.toLowerCase(), hash);
